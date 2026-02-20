@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Rainy Note - Heartfelt Masterpiece Ultimate</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body, html { width: 100%; height: 100vh; overflow: hidden; background: #000; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+        
+        #canvas-container { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; background: #000; }
+
+        /* --- 1. 便签区 --- */
+        #note-layer {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 85%; max-width: 600px; min-height: 500px;
+            z-index: 500; display: flex; flex-direction: column;
+            padding: 15px 40px 40px 40px; border-radius: 35px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 40px 80px rgba(0,0,0,0.3);
+            pointer-events: auto;
+            user-select: none;
+            transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #note-layer.hidden { opacity: 0; pointer-events: none; transform: translate(-50%, -45%) scale(0.92); }
+        #drag-handle { width: 100%; height: 35px; display: flex; justify-content: center; align-items: center; cursor: grab; margin-bottom: 10px; }
+        #drag-handle::after { content: ""; width: 50px; height: 5px; background: rgba(255,255,255,0.2); border-radius: 3px; }
+        #note-header { 
+            display: block; width: 100%; height: 50px; line-height: 50px;
+            background: transparent; border: none; outline: none; 
+            color: #fff; font-size: 30px; font-weight: 600; 
+            text-align: center; margin-bottom: 25px; letter-spacing: 4px; 
+            padding-left: 4px; text-shadow: 0 4px 15px rgba(0,0,0,1);
+            overflow: visible;
+        }
+        #note-body {
+            flex: 1; background: transparent; border: none; outline: none;
+            color: rgba(255, 255, 255, 0.95); font-size: 20px; line-height: 1.8;
+            resize: none; 
+            font-family: "Source Han Serif SC", "Source Han Serif CN", "Noto Serif CJK SC", "SimSun", serif; 
+            scrollbar-width: none;
+            user-select: auto;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        }
+        #audio-controls { margin-top: 25px; display: flex; align-items: center; justify-content: center; gap: 15px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 20px; }
+        .audio-btn { cursor: pointer; opacity: 0.7; transition: 0.3s; fill: white; width: 30px; height: 30px; }
+        .audio-btn:hover { opacity: 1; transform: scale(1.1); }
+
+        /* --- 2. 设置面板 --- */
+        #ui-wrapper { position: fixed; top: 30px; right: 30px; z-index: 2000; display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; }
+        .control-btns { display: flex; gap: 12px; pointer-events: auto; }
+        .ui-btn { 
+            width: 48px; height: 48px; background: rgba(0, 0, 0, 0.5); 
+            backdrop-filter: blur(20px); border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; 
+            cursor: pointer; border: 1px solid rgba(255,255,255,0.1); transition: 0.4s; 
+        }
+        .ui-btn:hover { background: rgba(255,255,255,0.15); transform: translateY(-2px); }
+        .ui-btn svg { fill: white; width: 22px; height: 22px; }
+        #panel { 
+            pointer-events: auto; width: 300px; background: rgba(0, 0, 0, 0.85); 
+            backdrop-filter: blur(40px); border-radius: 28px; margin-top: 15px; 
+            padding: 25px; border: 1px solid rgba(255,255,255,0.1); 
+            transform: translateX(450px); transition: 0.6s cubic-bezier(0.16, 1, 0.3, 1); 
+            opacity: 0; color: white; max-height: 85vh; overflow-y: auto; 
+        }
+        #panel.active { transform: translateX(0); opacity: 1; }
+        .dim-box { margin-bottom: 22px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px; }
+        .dim-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 18px; opacity: 0.8; display: flex; align-items: center; }
+        .dim-label::before { content: ""; width: 4px; height: 4px; background: #fff; border-radius: 50%; margin-right: 10px; }
+        .control-group { margin-bottom: 20px; position: relative; }
+        .control-group label { display: block; font-size: 12px; margin-bottom: 10px; opacity: 0.5; }
+        .badge { position: absolute; top: 0; right: 0; font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: rgba(255,255,255,0.1); height: 2px; outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #fff; border-radius: 50%; cursor: pointer; }
+        .upload-btn { width: 100%; padding: 14px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: white; font-size: 11px; cursor: pointer; font-weight: bold; letter-spacing: 1px; transition: 0.3s; margin-top: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<audio id="rain-audio" src="https://github.com/emmma-design218/raincut3-audio/raw/refs/heads/main/vem_click-rain-sound-188158%20(1).wav" loop preload="auto"></audio>
+
+<div id="note-layer">
+    <div id="drag-handle"></div>
+    <input type="text" id="note-header" value="HEARTFELT MASTER">
+    <textarea id="note-body" placeholder="在这里写作...">雨滴应当是绝对透明的。
+
+参考 Heartfelt 的逻辑，我们优化了全局采样。现在即便在屏幕边缘，水珠也会保持极其清澈的折射，不再浑浊。每一个雨点都是一颗晶莹的宝石。</textarea>
+    <div id="audio-controls">
+        <div class="audio-btn" id="play-pause">
+            <svg id="play-icon" width="30" height="30" viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z" /></svg>
+            <svg id="pause-icon" style="display:none" width="30" height="30" viewBox="0 0 24 24"><path d="M14,19H18V5H14M6,19H10V5H6V19Z" /></svg>
+        </div>
+        <span style="font-size: 11px; opacity: 0.4; letter-spacing: 2px; font-weight: bold;">NATURAL RAIN AUDIO</span>
+    </div>
+</div>
+
+<div id="ui-wrapper">
+    <div class="control-btns">
+        <div id="note-toggle-btn" class="ui-btn" title="显示/隐藏便签">
+            <svg viewBox="0 0 24 24"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" /></svg>
+        </div>
+        <div id="toggle-btn" class="ui-btn" title="设置">
+            <svg viewBox="0 0 24 24"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.35 19.43,11.03L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.47,5.34 14.86,5.12L14.47,2.47C14.44,2.23 14.24,2.05 14,2.05H10C9.76,2.05 9.56,2.23 9.53,2.47L9.14,5.12C8.53,5.34 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11.03C4.53,11.35 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.33 8.53,18.65 9.14,18.87L9.53,21.52C9.56,21.76 9.76,21.94 10,21.94H14C14.24,21.94 14.44,21.76 14.47,21.52L14.86,18.87C15.47,18.65 16.04,18.33 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z" /></svg>
+        </div>
+    </div>
+
+    <div id="panel">
+        <div class="dim-box">
+            <div class="dim-label">Atmosphere</div>
+            <div class="control-group"><label>Rain Intensity</label><span class="badge" id="bRain">100%</span><input type="range" id="iRain" min="0" max="200" value="100"></div>
+            <div class="control-group"><label>Foggy Glass</label><span class="badge" id="bBlur">60%</span><input type="range" id="iBlur" min="0" max="100" value="60"></div>
+            <div class="control-group"><label>Fall Speed</label><span class="badge" id="bSpeed">1.0x</span><input type="range" id="iSpeed" min="0" max="100" value="10"></div>
+        </div>
+        <div class="dim-box">
+            <div class="dim-label">Optics</div>
+            <div class="control-group"><label>Refraction</label><span class="badge" id="bRefract">1.00</span><input type="range" id="iRefract" min="0" max="200" value="100"></div>
+            <div class="control-group"><label>Zoom</label><span class="badge" id="bZoom">100%</span><input type="range" id="iZoom" min="33" max="110" value="100"></div>
+        </div>
+        <div class="dim-box">
+            <div class="dim-label">Note UI</div>
+            <div class="control-group"><label>Note Opacity</label><span class="badge" id="bNoteAlpha">12%</span><input type="range" id="iNoteAlpha" min="0" max="100" value="12"></div>
+            <div class="control-group"><label>Note Blur</label><span class="badge" id="bNoteBlur">40%</span><input type="range" id="iNoteBlur" min="0" max="100" value="40"></div>
+        </div>
+        <div class="dim-box">
+            <div class="dim-label">Post Process</div>
+            <div class="control-group"><label>Brightness</label><span class="badge" id="bBright">0.00</span><input type="range" id="iBright" min="-100" max="100" value="0"></div>
+            <div class="control-group"><label>Contrast</label><span class="badge" id="bContrast">1.00</span><input type="range" id="iContrast" min="0" max="200" value="100"></div>
+        </div>
+        <button class="upload-btn" id="uploadBtn">UPLOAD BACKGROUND</button>
+        <input type="file" id="file-input" accept="image/*" style="display:none">
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+    const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position, 1.0); }`;
+    const fShader = `
+        precision highp float;
+        uniform vec3 iResolution;
+        uniform float iTime;
+        uniform sampler2D iChannel0;
+        uniform float uRainAmount;
+        uniform float uFogAmount;
+        uniform float uSpeed;
+        uniform float uBgZoom;
+        uniform float uRefraction; 
+        uniform float uBrightness;
+        uniform float uContrast;
+        uniform float uTexAspect;
+        varying vec2 vUv;
+
+        #define S(a, b, t) smoothstep(a, b, t)
+
+        vec3 N13(float p) {
+           vec3 p3 = fract(vec3(p) * vec3(.1031,.11369,.13787));
+           p3 += dot(p3, p3.yzx + 19.19);
+           return fract(vec3((p3.x + p3.y)*p3.z, (p3.x+p3.z)*p3.y, (p3.y+p3.z)*p3.x));
+        }
+
+        float Saw(float b, float t) { return S(0., b, t)*S(1., b, t); }
+
+        vec2 DropLayer2(vec2 uv, float t) {
+            vec2 UV = uv;
+            uv.y += t * 0.75; 
+            vec2 a = vec2(6.0, 1.0); 
+            vec2 grid = a * 2.0;
+            vec2 id = floor(uv * grid);
+            float colShift = fract(sin(id.x * 123.4) * 567.8);
+            uv.y += colShift;
+            id = floor(uv * grid);
+            vec3 n = N13(id.x*35.2 + id.y*2376.1);
+            vec2 st = fract(uv * grid) - vec2(0.5, 0.0);
+            float x = n.x - 0.5;
+            float y = UV.y * 20.0;
+            float wiggle = sin(y + sin(y));
+            x += wiggle * (0.5 - abs(x)) * (n.z - 0.5);
+            x *= 0.7;
+            float ti = fract(t + n.z);
+            y = (Saw(0.85, ti) - 0.5) * 0.9 + 0.5;
+            vec2 p = vec2(x, y);
+            float d = length((st - p) * a.yx);
+            float mainDrop = S(0.4, 0.0, d);
+            float r = sqrt(S(1.0, y, st.y));
+            float cd = abs(st.x - x);
+            float trail = S(0.23 * r, 0.15 * r * r, cd);
+            float trailFront = S(-0.02, 0.02, st.y - y);
+            trail *= trailFront * r * r;
+            float droplets = max(0.0, (sin(UV.y * (1.0 - UV.y) * 120.0) - st.y)) * S(0.2 * r, 0.0, cd) * trailFront * n.z;
+            return vec2(mainDrop + droplets * r * trailFront, trail);
+        }
+
+        float StaticDrops(vec2 uv, float t) {
+            uv *= 40.0;
+            vec2 id = floor(uv);
+            uv = fract(uv) - 0.5;
+            vec3 n = N13(id.x * 107.45 + id.y * 3543.65);
+            vec2 p = (n.xy - 0.5) * 0.7;
+            float d = length(uv - p);
+            float fade = Saw(0.025, fract(t + n.z));
+            return S(0.3, 0.0, d) * fract(n.z * 10.0) * fade;
+        }
+
+        vec2 Drops(vec2 uv, float t, float l0, float l1, float l2) {
+            float s = StaticDrops(uv, t) * l0; 
+            vec2 m1 = DropLayer2(uv, t) * l1;
+            vec2 m2 = DropLayer2(uv * 1.85, t) * l2;
+            float c = s + m1.x + m2.x;
+            c = S(0.3, 1.0, c);
+            return vec2(c, max(m1.y * l1, m2.y * l2));
+        }
+
+        void main() {
+            float sA = iResolution.x / iResolution.y;
+            float tA = max(uTexAspect, 0.01);
+            vec2 bgUv = vUv - 0.5;
+            if (sA > tA) bgUv.y *= tA / sA; else bgUv.x *= sA / tA;
+            bgUv = (bgUv / max(uBgZoom, 0.1)) + 0.5;
+
+            vec2 p = (vUv - 0.5) * vec2(sA, 1.0);
+            float t = iTime * 0.2 * uSpeed;
+            float staticLayer = S(-0.5, 1.0, uRainAmount) * 2.0;
+            float layer1 = S(0.25, 0.75, uRainAmount);
+            float layer2 = S(0.0, 0.5, uRainAmount);
+            
+            vec2 c = Drops(p, t, staticLayer, layer1, layer2);
+            vec2 e = vec2(0.001, 0.0);
+            float cx = Drops(p + e, t, staticLayer, layer1, layer2).x;
+            float cy = Drops(p + e.yx, t, staticLayer, layer1, layer2).x;
+            vec2 n = vec2(cx - c.x, cy - c.x);
+
+            // --- 核心改进：提升全局通透感 ---
+            float maxBlur = uFogAmount * 8.0;
+            float minBlur = 0.01; // 将水滴核心模糊降至几乎为零
+            
+            // 计算当前采样位置的“清澈度”
+            // Heartfelt 逻辑：背景模糊受轨迹(trail)和水珠(drop)共同影响
+            // 水珠经过(c.x)时，背景应完全清澈；轨迹经过(c.y)时，背景部分洗刷
+            float focus = mix(maxBlur - c.y * maxBlur, minBlur, S(0.1, 0.2, c.x));
+            
+            vec2 refractOffset = n * uRefraction * 0.15;
+            
+            vec3 col = vec3(0.0);
+            // 关键优化：如果处于水珠核心区域，使用 0 采样模糊以获得绝对清澈感
+            if(focus < 0.05) {
+                col = texture2D(iChannel0, bgUv + refractOffset).rgb;
+            } else {
+                float tot = 0.0;
+                for(float i=-2.0; i<=2.0; i++) {
+                    for(float j=-2.0; j<=2.0; j++) {
+                        float w = 1.0 / (1.0 + length(vec2(i,j)));
+                        col += texture2D(iChannel0, bgUv + refractOffset + vec2(i,j) * 0.0015 * focus).rgb * w;
+                        tot += w;
+                    }
+                }
+                col /= tot;
+            }
+
+            col += uBrightness;
+            col = (col - 0.5) * uContrast + 0.5;
+            
+            // 移除了会导致浑浊感的 Vignette 和边缘暗角限制
+            col += c.x * 0.1 * uRefraction; 
+
+            gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+        }
+    `;
+
+    let scene, camera, renderer, material, currentTex;
+    let audio = document.getElementById('rain-audio');
+
+    function init() {
+        scene = new THREE.Scene();
+        camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+        camera.position.z = 1;
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const loader = new THREE.TextureLoader();
+        loader.load('https://images.unsplash.com/photo-1534274988757-a28bf1f539cf?q=80&w=2000&auto=format&fit=crop', (t) => {
+            t.minFilter = THREE.LinearFilter;
+            material.uniforms.iChannel0.value = t;
+            material.uniforms.uTexAspect.value = t.image.width / t.image.height;
+        });
+
+        material = new THREE.ShaderMaterial({
+            uniforms: {
+                iTime: { value: 0 },
+                iResolution: { value: new THREE.Vector3(window.innerWidth, window.innerHeight, 1) },
+                iChannel0: { value: null },
+                uRainAmount: { value: 1.0 },
+                uFogAmount: { value: 0.6 },
+                uSpeed: { value: 1.0 },
+                uBgZoom: { value: 1.0 },
+                uRefraction: { value: 1.0 },
+                uBrightness: { value: 0.0 },
+                uContrast: { value: 1.0 },
+                uTexAspect: { value: 1.0 }
+            },
+            vertexShader: vShader,
+            fragmentShader: fShader
+        });
+
+        scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
+        window.addEventListener('resize', onResize);
+        animate();
+        setupUI();
+        makeDraggable(document.getElementById('note-layer'), document.getElementById('drag-handle'));
+    }
+
+    function onResize() {
+        if(!material) return;
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        material.uniforms.iResolution.value.set(window.innerWidth, window.innerHeight, 1);
+    }
+
+    function animate(time) {
+        requestAnimationFrame(animate);
+        if(material) material.uniforms.iTime.value = time * 0.001;
+        if(renderer) renderer.render(scene, camera);
+    }
+
+    function setupUI() {
+        document.getElementById('note-toggle-btn').onclick = () => document.getElementById('note-layer').classList.toggle('hidden');
+        document.getElementById('toggle-btn').onclick = () => document.getElementById('panel').classList.toggle('active');
+        
+        const playBtn = document.getElementById('play-pause');
+        const playIcon = document.getElementById('play-icon');
+        const pauseIcon = document.getElementById('pause-icon');
+        playBtn.onclick = () => {
+            if (audio.paused) {
+                audio.play().then(() => {
+                    playIcon.style.display = 'none';
+                    pauseIcon.style.display = 'block';
+                });
+            } else {
+                audio.pause();
+                playIcon.style.display = 'block';
+                pauseIcon.style.display = 'none';
+            }
+        };
+
+        const bind = (id, badgeId, uniform, divisor, isFixed) => {
+            const el = document.getElementById(id);
+            el.oninput = (e) => {
+                const val = parseFloat(e.target.value);
+                material.uniforms[uniform].value = val / divisor;
+                const badge = document.getElementById(badgeId);
+                if (id === 'iSpeed') badge.innerText = (val/divisor).toFixed(1) + "x";
+                else if (isFixed) badge.innerText = (val/divisor).toFixed(2);
+                else badge.innerText = e.target.value + "%";
+            };
+        };
+
+        bind('iRain','bRain','uRainAmount', 100);
+        bind('iBlur','bBlur','uFogAmount', 100);
+        bind('iSpeed','bSpeed','uSpeed', 10);
+        bind('iRefract','bRefract','uRefraction', 100);
+        bind('iZoom','bZoom','uBgZoom', 100);
+        bind('iBright','bBright','uBrightness', 100, true);
+        bind('iContrast','bContrast','uContrast', 100, true);
+
+        const updateNoteUI = () => {
+            const alphaVal = document.getElementById('iNoteAlpha').value / 100;
+            const blurVal = document.getElementById('iNoteBlur').value / 100;
+            const noteLayer = document.getElementById('note-layer');
+            const blurRadius = blurVal * 40;
+            const saturation = 100 + blurVal * 50;
+            noteLayer.style.backgroundColor = `rgba(0, 0, 0, ${alphaVal})`;
+            noteLayer.style.backdropFilter = `blur(${blurRadius}px) saturate(${saturation}%)`;
+            noteLayer.style.webkitBackdropFilter = `blur(${blurRadius}px) saturate(${saturation}%)`;
+            noteLayer.style.borderColor = `rgba(255, 255, 255, ${0.1 * (alphaVal + blurVal)})`;
+            document.getElementById('bNoteAlpha').innerText = Math.round(alphaVal * 100) + '%';
+            document.getElementById('bNoteBlur').innerText = Math.round(blurVal * 100) + '%';
+        };
+
+        document.getElementById('iNoteAlpha').oninput = updateNoteUI;
+        document.getElementById('iNoteBlur').oninput = updateNoteUI;
+        updateNoteUI();
+
+        document.getElementById('uploadBtn').onclick = () => document.getElementById('file-input').click();
+        document.getElementById('file-input').onchange = (e) => {
+            const files = e.target.files;
+            if(!files || files.length === 0) return;
+            const url = URL.createObjectURL(files[0]);
+            new THREE.TextureLoader().load(url, (t) => {
+                material.uniforms.uTexAspect.value = t.image.width / t.image.height;
+                t.minFilter = THREE.LinearFilter;
+                material.uniforms.iChannel0.value = t;
+            });
+        };
+    }
+
+    function makeDraggable(element, handle) {
+        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+        handle.onmousedown = (e) => {
+            if(element.classList.contains('hidden')) return;
+            pos3 = e.clientX; pos4 = e.clientY;
+            document.onmouseup = () => { document.onmouseup = null; document.onmousemove = null; };
+            document.onmousemove = (e) => {
+                element.style.top = (element.offsetTop - (pos4 - e.clientY)) + "px";
+                element.style.left = (element.offsetLeft - (pos3 - e.clientX)) + "px";
+                pos3 = e.clientX; pos4 = e.clientY;
+                element.style.transform = 'none';
+                element.style.margin = '0';
+            };
+        };
+    }
+
+    init();
+</script>
+</body>
+</html>
